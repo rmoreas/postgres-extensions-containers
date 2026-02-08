@@ -53,6 +53,9 @@ jobs:
             pgaudit:
               - 'pgaudit/**'
               - *shared
+            rdkit:
+              - 'rdkit/**'
+              - *shared
 
       # Compute a matrix containing the list of all extensions that have been modified
       - name: Compute matrix
