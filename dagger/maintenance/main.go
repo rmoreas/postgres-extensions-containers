@@ -179,6 +179,10 @@ func (m *Maintenance) GenerateTestingValues(
 			"extension image %s doesn't have an 'org.opencontainers.image.version' annotation",
 			targetExtensionImage)
 	}
+	version, err = getExtensionDefaultVersion(targetExtensionImage, metadata.SQLName)
+	if err != nil {
+		return nil, err
+	}
 
 	extensions, err := generateTestingValuesExtensions(ctx, source, metadata, targetExtensionImage)
 	if err != nil {

@@ -1,14 +1,18 @@
 package main
 
 import (
+	"archive/tar"
 	"bytes"
 	"fmt"
+	"io"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/google/go-containerregistry/pkg/crane"
 	"github.com/google/go-containerregistry/pkg/name"
 	containerregistryv1 "github.com/google/go-containerregistry/pkg/v1"
+	"github.com/google/go-containerregistry/pkg/v1/mutate"
 	"github.com/google/go-containerregistry/pkg/v1/remote"
 	ocispecv1 "github.com/opencontainers/image-spec/specs-go/v1"
 )
@@ -139,4 +143,54 @@ func extractExtensionVersion(versions versionMap, distribution string, pgMajor i
 	}
 
 	return matches[1], nil
+}
+
+// getExtensionDefaultVersion extracts the default version from the extension control file
+// inside the given image using crane/remote to avoid Dagger engine restriction on HTTP registries.
+func getExtensionDefaultVersion(imageRef string, sqlName string) (string, error) {
+	ref, err := name.ParseReference(imageRef, name.Insecure)
+	if err != nil {
+		return "", fmt.Errorf("parsing reference %q: %w", imageRef, err)
+	}
+
+	img, err := remote.Image(ref)
+	if err != nil {
+		return "", fmt.Errorf("fetching image %q: %w", imageRef, err)
+	}
+
+	// Extract filesystem
+	fs := mutate.Extract(img)
+	defer fs.Close()
+
+	tr := tar.NewReader(fs)
+
+	controlPath := fmt.Sprintf("share/extension/%s.control", sqlName)
+
+	for {
+		header, err := tr.Next()
+		if err == io.EOF {
+			break // End of archive
+		}
+		if err != nil {
+			return "", err
+		}
+
+		name := strings.TrimPrefix(header.Name, "/")
+		if name == controlPath {
+			buf, err := io.ReadAll(tr)
+			if err != nil {
+				return "", err
+			}
+			content := string(buf)
+
+			re := regexp.MustCompile(`default_version\s*=\s*'([^']+)'`)
+			matches := re.FindStringSubmatch(content)
+			if len(matches) < 2 {
+				return "", fmt.Errorf("default_version not found in content of %s", controlPath)
+			}
+			return matches[1], nil
+		}
+	}
+
+	return "", fmt.Errorf("control file %s not found in image", controlPath)
 }
