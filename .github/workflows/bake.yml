@@ -12,6 +12,7 @@ on:
           - pgvector
           - postgis
           - pgaudit
+          - rdkit
 
 defaults:
   run:
